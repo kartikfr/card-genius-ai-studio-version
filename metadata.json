@@ -1,0 +1,5 @@
+{
+  "name": "Card Genius",
+  "description": "An intelligent credit card recommendation engine that analyzes spending patterns to maximize savings.",
+  "requestFramePermissions": []
+}
