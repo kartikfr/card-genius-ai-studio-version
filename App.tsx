@@ -1,20 +1,26 @@
+
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { SpendingForm } from './components/SpendingForm';
 import { ResultsView } from './components/ResultsView';
-import { INITIAL_SPENDING_PROFILE } from './constants';
-import { SpendingProfile, RecommendationResult } from './types';
+import { AdminLogin } from './components/AdminLogin';
+import { AdminDashboard } from './components/AdminDashboard';
+import { INITIAL_SPENDING_PROFILE, CREDIT_CARDS as INITIAL_CARDS } from './constants';
+import { SpendingProfile, RecommendationResult, CreditCard } from './types';
 import { calculateRecommendations } from './services/recommendationService';
 import { Button } from './components/Button';
-import { CreditCard, ArrowRight, Loader2 } from 'lucide-react';
+import { CreditCard as CreditCardIcon, ArrowRight, Loader2 } from 'lucide-react';
 
 // Simple Enum for View State
-type ViewState = 'WELCOME' | 'INPUT' | 'LOADING' | 'RESULTS';
+type ViewState = 'WELCOME' | 'INPUT' | 'LOADING' | 'RESULTS' | 'ADMIN_LOGIN' | 'ADMIN_DASHBOARD';
 
 function App() {
   const [view, setView] = useState<ViewState>('WELCOME');
   const [spendingData, setSpendingData] = useState<SpendingProfile>(INITIAL_SPENDING_PROFILE);
   const [recommendations, setRecommendations] = useState<RecommendationResult[]>([]);
+  
+  // Lifted State for Cards to allow Admin Updates
+  const [cards, setCards] = useState<CreditCard[]>(INITIAL_CARDS);
 
   const handleStart = () => {
     setView('INPUT');
@@ -30,25 +36,35 @@ function App() {
     setView('INPUT');
   };
 
+  const handleHomeClick = () => {
+    setView('WELCOME');
+    setSpendingData(INITIAL_SPENDING_PROFILE);
+  };
+
+  const handleAdminClick = () => {
+    setView('ADMIN_LOGIN');
+  };
+
   // Simulate analysis process
   useEffect(() => {
     if (view === 'LOADING') {
       const timer = setTimeout(() => {
-        const results = calculateRecommendations(spendingData);
+        // Use the dynamic 'cards' state instead of static constant
+        const results = calculateRecommendations(spendingData, cards);
         setRecommendations(results);
         setView('RESULTS');
         window.scrollTo(0, 0);
-      }, 2500); // 2.5s fake loading time
+      }, 2500);
       return () => clearTimeout(timer);
     }
-  }, [view, spendingData]);
+  }, [view, spendingData, cards]);
 
   return (
-    <Layout>
+    <Layout onHomeClick={handleHomeClick} onAdminClick={handleAdminClick}>
       {view === 'WELCOME' && (
         <div className="flex flex-col items-center justify-center py-12 md:py-20 text-center animate-fadeIn">
           <div className="bg-indigo-50 p-4 rounded-full mb-8">
-            <CreditCard className="w-12 h-12 text-indigo-600" />
+            <CreditCardIcon className="w-12 h-12 text-indigo-600" />
           </div>
           <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900 tracking-tight mb-6">
             Find Your Perfect <br className="hidden md:block" />
@@ -96,6 +112,18 @@ function App() {
 
       {view === 'RESULTS' && (
         <ResultsView results={recommendations} onRecalculate={handleRecalculate} />
+      )}
+
+      {view === 'ADMIN_LOGIN' && (
+        <AdminLogin onLogin={() => setView('ADMIN_DASHBOARD')} />
+      )}
+
+      {view === 'ADMIN_DASHBOARD' && (
+        <AdminDashboard 
+          cards={cards} 
+          onUpdateCards={setCards} 
+          onLogout={() => setView('WELCOME')} 
+        />
       )}
     </Layout>
   );

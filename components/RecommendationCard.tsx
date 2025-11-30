@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { RecommendationResult } from '../types';
 import { Button } from './Button';
-import { ChevronDown, ChevronUp, CheckCircle2, IndianRupee, Trophy, ExternalLink, Gift, Sparkles, Loader2, Globe } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle2, IndianRupee, Trophy, ExternalLink, Gift, Sparkles, Loader2, Globe, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { fetchCardUpdates, SearchResult } from '../services/aiService';
@@ -126,7 +127,14 @@ export const RecommendationCard: React.FC<Props> = ({ data, rank, isExpanded = f
                           <span className="font-medium text-slate-700 capitalize block">
                             {item.category === 'otherOnline' ? 'Other Online' : item.category}
                           </span>
-                          <span className="text-xs text-slate-400">Spend: ₹{item.spend.toLocaleString()} • Rate: {(item.rate * 100).toFixed(2)}%</span>
+                          <span className="text-xs text-slate-400 flex items-center gap-1">
+                             Spend: ₹{item.spend.toLocaleString()} • Rate: {(item.rate * 100).toFixed(2)}%
+                             {item.isCapped && (
+                               <span className="text-amber-600 font-medium bg-amber-50 px-1 rounded flex items-center gap-0.5" title={`Savings limited to ₹${item.cap}`}>
+                                 <AlertCircle size={10} /> Max ₹{item.cap}
+                               </span>
+                             )}
+                          </span>
                         </div>
                         <span className="font-bold text-emerald-600">+₹{Math.round(item.saved).toLocaleString()}</span>
                       </div>

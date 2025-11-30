@@ -1,77 +1,107 @@
-import { CREDIT_CARDS } from '../constants';
-import { RecommendationResult, SavingsBreakdown, SpendingProfile } from '../types';
 
-export const calculateRecommendations = (profile: SpendingProfile): RecommendationResult[] => {
+import { CREDIT_CARDS as DEFAULT_CARDS } from '../constants';
+import { RecommendationResult, SavingsBreakdown, SpendingProfile, CreditCard } from '../types';
+
+export const calculateRecommendations = (profile: SpendingProfile, cards: CreditCard[] = DEFAULT_CARDS): RecommendationResult[] => {
   // Calculate total annual spend for fee waiver check
   const totalMonthlySpend = (Object.values(profile) as number[]).reduce((a, b) => a + b, 0);
   const totalAnnualSpend = totalMonthlySpend * 12;
 
-  const results: RecommendationResult[] = CREDIT_CARDS.map((card) => {
+  const results: RecommendationResult[] = cards.map((card) => {
     let totalMonthlySavings = 0;
-    const breakdown: SavingsBreakdown[] = [];
+    let breakdown: SavingsBreakdown[] = [];
 
-    // Helper to calculate savings for a category
-    const calculateCategorySavings = (category: keyof SpendingProfile, spend: number) => {
-      const reward = card.rewards[category];
-      if (!reward) return { saved: 0, rate: 0 }; // Safety check for missing reward keys
-
-      let saved = spend * reward.rate;
-      
-      // Apply Cap if exists
-      // Note: Some cards have combined caps (like HSBC dining+grocery). 
-      // For MVP, we use the specific cap defined in the constant.
-      if (reward.cap && saved > reward.cap) {
-        saved = reward.cap;
-      }
-      
-      return { saved, rate: reward.rate };
-    };
-
-    // Calculate for all categories present in profile
+    // 1. Calculate Individual Category Savings
     (Object.keys(profile) as Array<keyof SpendingProfile>).forEach((category) => {
       const spend = profile[category];
-      if (spend > 0) {
-        const { saved, rate } = calculateCategorySavings(category, spend);
-        totalMonthlySavings += saved;
-        
+      const reward = card.rewards[category];
+
+      if (spend > 0 && reward) {
+        let saved = spend * reward.rate;
+        let isCapped = false;
+
+        // Apply Individual Cap if exists
+        if (reward.cap && saved > reward.cap) {
+          saved = reward.cap;
+          isCapped = true;
+        }
+
         if (saved > 0) {
           breakdown.push({
             category,
             spend,
             saved,
-            rate
+            rate: reward.rate,
+            cap: reward.cap,
+            isCapped
           });
         }
       }
     });
 
-    // Special logic for Combined Caps (Hardcoded for specific popular edge cases)
-    // 1. HSBC Cashback: Combined cap of 1000 for Dining, Grocery, Food Delivery
-    if (card.id === 'hsbc-cashback') {
-      const hsbcHighYield = ['dining', 'grocery'];
-      let highYieldSavings = 0;
-      
-      // Recalculate these specific ones to enforce combined cap
-      const otherSavings = breakdown.filter(b => !hsbcHighYield.includes(b.category));
-      
-      hsbcHighYield.forEach(cat => {
-        const item = breakdown.find(b => b.category === cat);
-        if (item) highYieldSavings += item.saved;
-      });
+    // 2. Apply Shared Caps (e.g., HDFC Millennia 1000 cap shared across Amazon/Flipkart/Swiggy/etc)
+    if (card.sharedCaps) {
+      card.sharedCaps.forEach(sharedCap => {
+        // Find all breakdown items that belong to this shared group
+        const itemsInGroup = breakdown.filter(item => 
+          sharedCap.categories.includes(item.category as keyof SpendingProfile)
+        );
 
-      if (highYieldSavings > 1000) {
-        const cappedTotal = 1000;
-        // Reduce the total savings by the excess amount
-        totalMonthlySavings = totalMonthlySavings - (highYieldSavings - cappedTotal);
-        
-        // Update breakdown for display purposes
-        breakdown.forEach(b => {
-           if (hsbcHighYield.includes(b.category)) {
-             b.saved = (b.saved / highYieldSavings) * cappedTotal;
-           }
-        });
-      }
+        const totalSavedInGroup = itemsInGroup.reduce((sum, item) => sum + item.saved, 0);
+
+        // If the group total exceeds the shared cap
+        if (totalSavedInGroup > sharedCap.cap) {
+          // Calculate scale factor to reduce proportionally
+          const scaleFactor = sharedCap.cap / totalSavedInGroup;
+
+          // Update the items in the breakdown
+          itemsInGroup.forEach(item => {
+            item.saved = item.saved * scaleFactor;
+            item.isCapped = true; // Mark as capped by shared limit
+            item.cap = sharedCap.cap; // Show the shared cap value
+          });
+        }
+      });
     }
+
+    // 3. Special Hardcoded Logic for complex edge cases not easily modifiable via config
+    if (card.id === 'amex-gold') {
+       const activeCategories = (Object.values(profile) as number[]).filter(v => v >= 1000).length;
+       if (activeCategories >= 2 || totalMonthlySpend > 6000) {
+         const bonusSavings = 300; 
+         breakdown.push({
+           category: 'Milestone Bonus',
+           spend: 0,
+           saved: bonusSavings,
+           rate: 0
+         });
+       }
+    }
+
+    if (card.id === 'amex-platinum-travel') {
+       if (totalAnnualSpend >= 190000) {
+          const m1MonthlyValue = 4500 / 12;
+          breakdown.push({ category: 'Milestone (1.9L)', spend: 0, saved: m1MonthlyValue, rate: 0 });
+       }
+       
+       if (totalAnnualSpend >= 400000) {
+          const m2MonthlyValue = 10000 / 12; 
+          breakdown.push({ category: 'Milestone (4L)', spend: 0, saved: m2MonthlyValue, rate: 0 });
+       }
+    }
+
+    if (card.id === 'amex-mrcc') {
+        if (totalMonthlySpend >= 6000) {
+             breakdown.push({ category: 'Bonus (4x1500)', spend: 0, saved: 300, rate: 0 });
+        }
+        if (totalMonthlySpend >= 20000) {
+             breakdown.push({ category: 'Bonus (20k Spend)', spend: 0, saved: 300, rate: 0 });
+        }
+    }
+
+
+    // Recalculate Total Monthly Savings from adjusted breakdown
+    totalMonthlySavings = breakdown.reduce((sum, item) => sum + item.saved, 0);
 
     const annualSavings = totalMonthlySavings * 12;
     

@@ -14,7 +14,7 @@ export interface SpendingProfile {
 
 export interface RewardRate {
   rate: number; // Percentage, e.g., 0.05 for 5%
-  cap?: number; // Monthly cap in currency units
+  cap?: number; // Individual monthly cap in currency units
   minSpend?: number;
 }
 
@@ -31,6 +31,12 @@ export interface CardRewards {
   offline: RewardRate;
 }
 
+export interface SharedCap {
+  categories: Array<keyof SpendingProfile>;
+  cap: number; // Monthly cap in currency for these categories combined
+  period?: 'monthly' | 'annual';
+}
+
 export interface CreditCard {
   id: string;
   name: string;
@@ -42,6 +48,7 @@ export interface CreditCard {
   waiverThreshold?: number; // Annual spend required to waive fee
   joiningBonus?: string;
   rewards: CardRewards;
+  sharedCaps?: SharedCap[]; // New field for shared limits
   features: string[];
   applyLink: string;
 }
@@ -51,6 +58,8 @@ export interface SavingsBreakdown {
   spend: number;
   saved: number;
   rate: number;
+  cap?: number;       // The limit applied if any
+  isCapped?: boolean; // Whether the cap was hit
 }
 
 export interface RecommendationResult {
